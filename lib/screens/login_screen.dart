@@ -324,60 +324,6 @@ class _LoginScreenState extends State<LoginScreen> {
                         ],
                       ),
                     ),
-                    const SizedBox(height: 16),
-
-                    // Demo Helper Box for Quick Testing
-                    Container(
-                      padding: const EdgeInsets.all(12),
-                      decoration: BoxDecoration(
-                        color: EdumindTheme.cardDark,
-                        borderRadius: BorderRadius.circular(12),
-                        border: Border.all(color: EdumindTheme.primaryBlue.withValues(alpha: 0.35)),
-                      ),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
-                        children: [
-                          Row(
-                            children: [
-                              const Icon(Icons.info_outline, size: 16, color: EdumindTheme.accentCyan),
-                              const SizedBox(width: 8),
-                              Expanded(
-                                child: Text(
-                                  isAr ? 'حساب تجريبي للاختبار الفوري :' : 'Compte Démo pour test immédiat :',
-                                  style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.white),
-                                ),
-                              ),
-                            ],
-                          ),
-                          const SizedBox(height: 8),
-                          Row(
-                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                            children: [
-                              const Text('📱 0550000000', style: TextStyle(fontSize: 12, color: Color(0xFFCBD5E1))),
-                              const Text('🔑 PIN: 1234', style: TextStyle(fontSize: 12, color: Color(0xFFCBD5E1))),
-                              InkWell(
-                                onTap: () {
-                                  _phoneController.text = '0550000000';
-                                  _secretController.text = '1234';
-                                  setState(() {});
-                                },
-                                child: Container(
-                                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                                  decoration: BoxDecoration(
-                                    color: EdumindTheme.primaryBlue.withValues(alpha: 0.25),
-                                    borderRadius: BorderRadius.circular(6),
-                                  ),
-                                  child: Text(
-                                    isAr ? 'ملء تلقائي' : 'Remplir',
-                                    style: const TextStyle(fontSize: 11, color: EdumindTheme.accentCyan, fontWeight: FontWeight.bold),
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ),
-                        ],
-                      ),
-                    ),
                     const SizedBox(height: 24),
 
                     // Footer Version

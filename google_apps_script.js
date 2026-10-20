@@ -508,6 +508,17 @@ function getAllRecords(sheetName) {
         let s = String(val !== undefined && val !== null ? val : '').trim();
         if (s.startsWith("'")) s = s.slice(1);
         val = s;
+      } else if (h === 'session_date') {
+        if (val instanceof Date) {
+          const y = val.getFullYear();
+          const m = String(val.getMonth() + 1).padStart(2, '0');
+          const d = String(val.getDate()).padStart(2, '0');
+          val = `${y}-${m}-${d}`;
+        } else {
+          let s = String(val !== undefined && val !== null ? val : '').trim();
+          if (s.startsWith("'")) s = s.slice(1);
+          val = s;
+        }
       }
       obj[h] = val;
     }

@@ -30,8 +30,8 @@ class _HomeTimetableScreenState extends State<HomeTimetableScreen> {
     _syncService.refreshTeacherData();
   }
 
-  void _openAttendance(ScheduleSlot slot) {
-    Get.to(() => AttendanceRollScreen(slot: slot));
+  void _openAttendance(ScheduleSlot slot, {bool isReadOnly = false}) {
+    Get.to(() => AttendanceRollScreen(slot: slot, isReadOnly: isReadOnly));
   }
 
   void _showManualClassPicker(BuildContext context, String lang) {
@@ -110,6 +110,7 @@ class _HomeTimetableScreenState extends State<HomeTimetableScreen> {
     final conn = Get.find<ConnectivityService>();
 
     return Obx(() {
+      final _ = _syncService.attendancesVersion.value;
       final lang = _authService.currentLang.value;
       final isAr = lang == 'ar';
       final teacher = _authService.currentTeacher.value;
@@ -270,57 +271,95 @@ class _HomeTimetableScreenState extends State<HomeTimetableScreen> {
 
   Widget _buildActiveSlotHero(ScheduleSlot slot, String lang) {
     final enrolledCount = _syncService.getStudentsForGroup(slot.groupId).length;
+    final todayStr = TimeUtils.getTodayDateString();
+    final isSubmitted = _syncService.isSessionSubmitted(
+      groupId: slot.groupId,
+      sessionDate: todayStr,
+      timeSlot: slot.timeSlotLabel,
+    );
 
     return Container(
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(22),
-        gradient: const LinearGradient(
-          colors: [Color(0xFF1E3A8A), Color(0xFF1E40AF), Color(0xFF0F172A)],
+        gradient: LinearGradient(
+          colors: isSubmitted
+              ? [const Color(0xFF0F3D2E), const Color(0xFF134E4A), const Color(0xFF0F172A)]
+              : const [Color(0xFF1E3A8A), Color(0xFF1E40AF), Color(0xFF0F172A)],
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
         ),
         boxShadow: [
           BoxShadow(
-            color: EdumindTheme.primaryBlue.withValues(alpha: 0.35),
+            color: (isSubmitted ? EdumindTheme.presentGreen : EdumindTheme.primaryBlue).withValues(alpha: 0.35),
             blurRadius: 20,
             offset: const Offset(0, 6),
           ),
         ],
-        border: Border.all(color: EdumindTheme.accentCyan.withValues(alpha: 0.4), width: 1.5),
+        border: Border.all(
+          color: (isSubmitted ? EdumindTheme.presentGreen : EdumindTheme.accentCyan).withValues(alpha: 0.4),
+          width: 1.5,
+        ),
       ),
       padding: const EdgeInsets.all(20),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // On Air Badge
+          // On Air / Status Badge
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                decoration: BoxDecoration(
-                  color: EdumindTheme.presentGreen.withValues(alpha: 0.2),
-                  borderRadius: BorderRadius.circular(20),
-                  border: Border.all(color: EdumindTheme.presentGreen),
-                ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: EdumindTheme.presentGreen.withValues(alpha: 0.2),
+                      borderRadius: BorderRadius.circular(20),
+                      border: Border.all(color: EdumindTheme.presentGreen),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Container(
+                          width: 8,
+                          height: 8,
+                          decoration: const BoxDecoration(
+                            shape: BoxShape.circle,
+                            color: EdumindTheme.presentGreen,
+                          ),
+                        ),
+                        const SizedBox(width: 6),
+                        Text(
+                          AppTranslations.get('current_session', lang: lang),
+                          style: const TextStyle(color: EdumindTheme.presentGreen, fontSize: 12, fontWeight: FontWeight.bold),
+                        ),
+                      ],
+                    ),
+                  ),
+                  if (isSubmitted) ...[
+                    const SizedBox(width: 8),
                     Container(
-                      width: 8,
-                      height: 8,
-                      decoration: const BoxDecoration(
-                        shape: BoxShape.circle,
-                        color: EdumindTheme.presentGreen,
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: Colors.white.withValues(alpha: 0.12),
+                        borderRadius: BorderRadius.circular(20),
+                        border: Border.all(color: Colors.white30),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const Icon(Icons.lock_rounded, size: 12, color: EdumindTheme.presentGreen),
+                          const SizedBox(width: 4),
+                          Text(
+                            AppTranslations.get('session_completed', lang: lang),
+                            style: const TextStyle(color: EdumindTheme.presentGreen, fontSize: 11, fontWeight: FontWeight.bold),
+                          ),
+                        ],
                       ),
                     ),
-                    const SizedBox(width: 6),
-                    Text(
-                      AppTranslations.get('current_session', lang: lang),
-                      style: const TextStyle(color: EdumindTheme.presentGreen, fontSize: 12, fontWeight: FontWeight.bold),
-                    ),
                   ],
-                ),
+                ],
               ),
               Text(
                 slot.timeSlotLabel,
@@ -382,16 +421,27 @@ class _HomeTimetableScreenState extends State<HomeTimetableScreen> {
               ),
               const SizedBox(width: 8),
               ElevatedButton.icon(
-                onPressed: () => _openAttendance(slot),
+                onPressed: () => _openAttendance(slot, isReadOnly: isSubmitted),
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: EdumindTheme.accentCyan,
-                  foregroundColor: const Color(0xFF0A1124),
+                  backgroundColor: isSubmitted
+                      ? EdumindTheme.presentGreen.withValues(alpha: 0.25)
+                      : EdumindTheme.accentCyan,
+                  foregroundColor: isSubmitted ? Colors.white : const Color(0xFF0A1124),
+                  side: isSubmitted
+                      ? const BorderSide(color: EdumindTheme.presentGreen, width: 1.5)
+                      : BorderSide.none,
                   padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
                 ),
-                icon: const Icon(Icons.checklist_rounded, size: 20),
+                icon: Icon(
+                  isSubmitted ? Icons.visibility_rounded : Icons.checklist_rounded,
+                  size: 20,
+                  color: isSubmitted ? EdumindTheme.presentGreen : const Color(0xFF0A1124),
+                ),
                 label: Text(
-                  AppTranslations.get('mark_attendance', lang: lang),
+                  isSubmitted
+                      ? AppTranslations.get('view_attendance', lang: lang)
+                      : AppTranslations.get('mark_attendance', lang: lang),
                   style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
                 ),
               ),
@@ -452,15 +502,25 @@ class _HomeTimetableScreenState extends State<HomeTimetableScreen> {
 
   Widget _buildSlotCard(ScheduleSlot slot, String lang) {
     final isActive = TimeUtils.isSlotActive(slot);
+    final todayStr = TimeUtils.getTodayDateString();
+    final isSubmitted = _syncService.isSessionSubmitted(
+      groupId: slot.groupId,
+      sessionDate: todayStr,
+      timeSlot: slot.timeSlotLabel,
+    );
 
     return Container(
       margin: const EdgeInsets.only(bottom: 10),
       decoration: BoxDecoration(
-        color: isActive ? EdumindTheme.primaryBlue.withValues(alpha: 0.12) : EdumindTheme.cardDark,
+        color: isSubmitted
+            ? EdumindTheme.presentGreen.withValues(alpha: 0.06)
+            : (isActive ? EdumindTheme.primaryBlue.withValues(alpha: 0.12) : EdumindTheme.cardDark),
         borderRadius: BorderRadius.circular(16),
         border: Border.all(
-          color: isActive ? EdumindTheme.primaryBlue : EdumindTheme.borderDark,
-          width: isActive ? 1.5 : 1.0,
+          color: isSubmitted
+              ? EdumindTheme.presentGreen.withValues(alpha: 0.4)
+              : (isActive ? EdumindTheme.primaryBlue : EdumindTheme.borderDark),
+          width: isActive || isSubmitted ? 1.5 : 1.0,
         ),
       ),
       child: ListTile(
@@ -468,7 +528,9 @@ class _HomeTimetableScreenState extends State<HomeTimetableScreen> {
         leading: Container(
           padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
           decoration: BoxDecoration(
-            color: isActive ? EdumindTheme.primaryBlue : EdumindTheme.cardSubtleDark,
+            color: isSubmitted
+                ? EdumindTheme.presentGreen.withValues(alpha: 0.18)
+                : (isActive ? EdumindTheme.primaryBlue : EdumindTheme.cardSubtleDark),
             borderRadius: BorderRadius.circular(10),
           ),
           child: Text(
@@ -476,28 +538,72 @@ class _HomeTimetableScreenState extends State<HomeTimetableScreen> {
             style: TextStyle(
               fontWeight: FontWeight.bold,
               fontSize: 13,
-              color: isActive ? Colors.white : Colors.white70,
+              color: isSubmitted ? EdumindTheme.presentGreen : (isActive ? Colors.white : Colors.white70),
             ),
           ),
         ),
-        title: Text(
-          slot.groupName,
-          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
+        title: Row(
+          children: [
+            Expanded(
+              child: Text(
+                slot.groupName,
+                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
+              ),
+            ),
+            if (isSubmitted)
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                decoration: BoxDecoration(
+                  color: EdumindTheme.presentGreen.withValues(alpha: 0.15),
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: EdumindTheme.presentGreen.withValues(alpha: 0.4)),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Icon(Icons.check_circle_rounded, size: 12, color: EdumindTheme.presentGreen),
+                    const SizedBox(width: 4),
+                    Text(
+                      AppTranslations.get('session_completed', lang: lang),
+                      style: const TextStyle(
+                        fontSize: 11,
+                        color: EdumindTheme.presentGreen,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+          ],
         ),
         subtitle: Text(
           '${slot.subjectName} · ${AppTranslations.get('room', lang: lang)} ${slot.roomName} (${slot.timeSlotLabel})',
           style: const TextStyle(fontSize: 12, color: Colors.grey),
         ),
-        trailing: ElevatedButton(
-          onPressed: () => _openAttendance(slot),
+        trailing: ElevatedButton.icon(
+          onPressed: () => _openAttendance(slot, isReadOnly: isSubmitted),
           style: ElevatedButton.styleFrom(
-            backgroundColor: isActive ? EdumindTheme.primaryBlue : EdumindTheme.cardHoverDark,
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+            backgroundColor: isSubmitted
+                ? EdumindTheme.presentGreen.withValues(alpha: 0.15)
+                : (isActive ? EdumindTheme.primaryBlue : EdumindTheme.cardHoverDark),
+            foregroundColor: isSubmitted ? EdumindTheme.presentGreen : Colors.white,
+            side: isSubmitted ? const BorderSide(color: EdumindTheme.presentGreen, width: 1.0) : BorderSide.none,
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
             minimumSize: Size.zero,
             tapTargetSize: MaterialTapTargetSize.shrinkWrap,
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
           ),
-          child: const Text('تسجيل', style: TextStyle(fontSize: 12)),
+          icon: Icon(
+            isSubmitted ? Icons.visibility_rounded : Icons.edit_note_rounded,
+            size: 14,
+            color: isSubmitted ? EdumindTheme.presentGreen : Colors.white,
+          ),
+          label: Text(
+            isSubmitted
+                ? AppTranslations.get('view_attendance_short', lang: lang)
+                : (lang == 'fr' ? 'Appel' : 'تسجيل'),
+            style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
+          ),
         ),
       ),
     );

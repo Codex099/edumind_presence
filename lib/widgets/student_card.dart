@@ -12,6 +12,7 @@ class StudentCard extends StatelessWidget {
   final VoidCallback onToggleStatus;
   final Function(String note) onNoteChanged;
   final String lang;
+  final bool isReadOnly;
 
   const StudentCard({
     super.key,
@@ -21,6 +22,7 @@ class StudentCard extends StatelessWidget {
     required this.onToggleStatus,
     required this.onNoteChanged,
     this.lang = 'ar',
+    this.isReadOnly = false,
   });
 
   Color _getStatusColor() {
@@ -179,15 +181,29 @@ class StudentCard extends StatelessWidget {
                 ),
 
                 // Note icon button
-                IconButton(
-                  icon: Icon(
-                    note.isEmpty ? Icons.note_add_outlined : Icons.note_alt,
-                    size: 20,
-                    color: note.isEmpty ? Colors.grey : EdumindTheme.primaryBlue,
+                if (isReadOnly) ...[
+                  if (note.isNotEmpty)
+                    IconButton(
+                      icon: const Icon(
+                        Icons.note_alt,
+                        size: 20,
+                        color: EdumindTheme.primaryBlue,
+                      ),
+                      onPressed: () => _showReadOnlyNoteDialog(context),
+                      tooltip: AppTranslations.get('view_note', lang: lang),
+                    )
+                  else
+                    const SizedBox(width: 8),
+                ] else
+                  IconButton(
+                    icon: Icon(
+                      note.isEmpty ? Icons.note_add_outlined : Icons.note_alt,
+                      size: 20,
+                      color: note.isEmpty ? Colors.grey : EdumindTheme.primaryBlue,
+                    ),
+                    onPressed: () => _showNoteDialog(context),
+                    tooltip: AppTranslations.get('add_note', lang: lang),
                   ),
-                  onPressed: () => _showNoteDialog(context),
-                  tooltip: AppTranslations.get('add_note', lang: lang),
-                ),
 
                 // Interactive Status Pill Button
                 AnimatedContainer(
@@ -218,6 +234,47 @@ class StudentCard extends StatelessWidget {
             ),
           ),
         ),
+      ),
+    );
+  }
+
+  void _showReadOnlyNoteDialog(BuildContext context) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: EdumindTheme.cardDark,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: Row(
+          children: [
+            const Icon(Icons.note_alt, size: 20, color: EdumindTheme.accentCyan),
+            const SizedBox(width: 8),
+            Text(
+              AppTranslations.get('view_note', lang: lang),
+              style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+            ),
+          ],
+        ),
+        content: Container(
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: EdumindTheme.inputDark,
+            borderRadius: BorderRadius.circular(10),
+          ),
+          child: Text(
+            note,
+            style: const TextStyle(fontSize: 14, color: Colors.white),
+          ),
+        ),
+        actions: [
+          ElevatedButton(
+            onPressed: () => Navigator.pop(ctx),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: EdumindTheme.primaryBlue,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+            ),
+            child: Text(AppTranslations.get('close', lang: lang)),
+          ),
+        ],
       ),
     );
   }

@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:get/get.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 import '../services/auth_service.dart';
@@ -24,15 +25,22 @@ class _QrLinkScreenState extends State<QrLinkScreen> {
   bool _isProcessing = false;
   String? _errorMessage;
   bool _showManualInput = false;
+  double _currentZoom = 1.0;
   final TextEditingController _manualUrlController = TextEditingController();
 
   @override
   void initState() {
     super.initState();
+    // Optimized specifically for budget hardware (MediaTek Helio G85 on Redmi Note 9)
+    // 1. Restrict formats to QR Code only (drops CPU load by 80%)
+    // 2. Disable returnImage bitmap allocations
+    // 3. noDuplicates detection speed to avoid redundant frames
     _scannerController = MobileScannerController(
+      formats: const [BarcodeFormat.qrCode],
       detectionSpeed: DetectionSpeed.noDuplicates,
       facing: CameraFacing.back,
       torchEnabled: false,
+      returnImage: false,
     );
   }
 
@@ -41,6 +49,15 @@ class _QrLinkScreenState extends State<QrLinkScreen> {
     _scannerController.dispose();
     _manualUrlController.dispose();
     super.dispose();
+  }
+
+  void _toggleZoom() {
+    setState(() {
+      _currentZoom = _currentZoom == 1.0 ? 2.0 : 1.0;
+    });
+    try {
+      _scannerController.setZoomScale(_currentZoom);
+    } catch (_) {}
   }
 
   Future<void> _handleScannedData(String raw) async {
@@ -104,6 +121,14 @@ class _QrLinkScreenState extends State<QrLinkScreen> {
     }
   }
 
+  Future<void> _pasteFromClipboard() async {
+    final data = await Clipboard.getData(Clipboard.kTextPlain);
+    if (data?.text != null && data!.text!.trim().isNotEmpty) {
+      _manualUrlController.text = data.text!.trim();
+      setState(() {});
+    }
+  }
+
   void _submitManualUrl() {
     final text = _manualUrlController.text.trim();
     if (text.isEmpty) {
@@ -141,19 +166,46 @@ class _QrLinkScreenState extends State<QrLinkScreen> {
           ),
           centerTitle: true,
           actions: [
-            ValueListenableBuilder<MobileScannerState>(
-              valueListenable: _scannerController,
-              builder: (context, state, child) {
-                final isOn = state.torchState == TorchState.on;
-                return IconButton(
-                  icon: Icon(
-                    isOn ? Icons.flash_on_rounded : Icons.flash_off_rounded,
-                    color: isOn ? EdumindTheme.accentCyan : Colors.white70,
+            if (!_showManualInput) ...[
+              // Zoom Scale Toggle (Essential for Redmi Note 9 camera minimum focus distance)
+              IconButton(
+                icon: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+                  decoration: BoxDecoration(
+                    color: _currentZoom > 1.0 ? EdumindTheme.accentCyan.withValues(alpha: 0.25) : Colors.white12,
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(
+                      color: _currentZoom > 1.0 ? EdumindTheme.accentCyan : Colors.white24,
+                    ),
                   ),
-                  onPressed: () => _scannerController.toggleTorch(),
-                );
-              },
-            ),
+                  child: Text(
+                    '${_currentZoom.toInt()}x',
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.bold,
+                      color: _currentZoom > 1.0 ? EdumindTheme.accentCyan : Colors.white,
+                    ),
+                  ),
+                ),
+                tooltip: 'Zoom',
+                onPressed: _toggleZoom,
+              ),
+              // Torch / Flashlight Toggle
+              ValueListenableBuilder<MobileScannerState>(
+                valueListenable: _scannerController,
+                builder: (context, state, child) {
+                  final isOn = state.torchState == TorchState.on;
+                  return IconButton(
+                    icon: Icon(
+                      isOn ? Icons.flash_on_rounded : Icons.flash_off_rounded,
+                      color: isOn ? EdumindTheme.accentCyan : Colors.white70,
+                    ),
+                    tooltip: 'Flash',
+                    onPressed: () => _scannerController.toggleTorch(),
+                  );
+                },
+              ),
+            ],
           ],
         ),
         body: SafeArea(
@@ -191,7 +243,7 @@ class _QrLinkScreenState extends State<QrLinkScreen> {
                 ),
               ),
 
-              const SizedBox(height: 12),
+              const SizedBox(height: 10),
 
               // Scanner / Manual View
               Expanded(
@@ -206,12 +258,64 @@ class _QrLinkScreenState extends State<QrLinkScreen> {
                         if (!_showManualInput)
                           MobileScanner(
                             controller: _scannerController,
+                            errorBuilder: (context, error) {
+                              return Container(
+                                color: EdumindTheme.cardDark,
+                                padding: const EdgeInsets.all(24),
+                                child: Column(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  children: [
+                                    const Icon(
+                                      Icons.videocam_off_rounded,
+                                      size: 48,
+                                      color: EdumindTheme.lateOrange,
+                                    ),
+                                    const SizedBox(height: 16),
+                                    Text(
+                                      isAr ? 'تعذر تشغيل الكاميرا' : 'Accès caméra indisponible',
+                                      style: const TextStyle(
+                                        fontSize: 16,
+                                        fontWeight: FontWeight.bold,
+                                        color: Colors.white,
+                                      ),
+                                    ),
+                                    const SizedBox(height: 8),
+                                    Text(
+                                      isAr
+                                          ? 'تأكد من تفعيل إذن الكاميرا لتطبيق EDUMIND في إعدادات الهاتف، أو استخدم خيار الإدخال اليدوي.'
+                                          : 'Vérifiez l\'autorisation de la caméra dans les paramètres de votre téléphone, ou utilisez la saisie manuelle.',
+                                      textAlign: TextAlign.center,
+                                      style: const TextStyle(fontSize: 12, color: Colors.grey),
+                                    ),
+                                    const SizedBox(height: 16),
+                                    ElevatedButton.icon(
+                                      onPressed: () {
+                                        setState(() {
+                                          _showManualInput = true;
+                                        });
+                                      },
+                                      style: ElevatedButton.styleFrom(
+                                        backgroundColor: EdumindTheme.primaryBlue,
+                                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                                      ),
+                                      icon: const Icon(Icons.keyboard_rounded, size: 18),
+                                      label: Text(
+                                        isAr ? 'إدخال الرابط يدوياً' : 'Saisie manuelle du lien',
+                                        style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              );
+                            },
                             onDetect: (capture) {
+                              if (_isProcessing) return;
                               final barcodes = capture.barcodes;
                               for (final barcode in barcodes) {
-                                final val = barcode.rawValue;
-                                if (val != null && val.isNotEmpty) {
-                                  _handleScannedData(val);
+                                final val = barcode.rawValue ?? barcode.displayValue;
+                                if (val != null && val.trim().isNotEmpty) {
+                                  _handleScannedData(val.trim());
                                   break;
                                 }
                               }
@@ -257,6 +361,11 @@ class _QrLinkScreenState extends State<QrLinkScreen> {
                                     fillColor: EdumindTheme.bgDark,
                                     hintText: 'https://script.google.com/macros/s/.../exec',
                                     hintStyle: const TextStyle(color: Colors.white30, fontSize: 12),
+                                    suffixIcon: IconButton(
+                                      icon: const Icon(Icons.paste_rounded, color: EdumindTheme.accentCyan, size: 20),
+                                      tooltip: isAr ? 'لصق من الحافظة' : 'Coller le lien',
+                                      onPressed: _pasteFromClipboard,
+                                    ),
                                     border: OutlineInputBorder(
                                       borderRadius: BorderRadius.circular(12),
                                       borderSide: const BorderSide(color: EdumindTheme.borderDark),
@@ -295,7 +404,7 @@ class _QrLinkScreenState extends State<QrLinkScreen> {
                           ),
 
                         // Viewfinder Overlay Reticle
-                        if (!_showManualInput)
+                        if (!_showManualInput) ...[
                           Container(
                             decoration: BoxDecoration(
                               border: Border.all(
@@ -309,6 +418,32 @@ class _QrLinkScreenState extends State<QrLinkScreen> {
                             width: 240,
                             height: 240,
                           ),
+                          // Distance tip floating pill
+                          Positioned(
+                            bottom: 20,
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                              decoration: BoxDecoration(
+                                color: Colors.black.withValues(alpha: 0.7),
+                                borderRadius: BorderRadius.circular(20),
+                                border: Border.all(color: Colors.white24),
+                              ),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  const Icon(Icons.photo_camera_rounded, size: 14, color: EdumindTheme.accentCyan),
+                                  const SizedBox(width: 6),
+                                  Text(
+                                    isAr
+                                        ? 'حافظ على مسافة 20-30 سم من الشاشة'
+                                        : 'Gardez 20-30 cm de distance avec l\'écran',
+                                    style: const TextStyle(fontSize: 11, color: Colors.white70),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ],
 
                         // Processing Loading Overlay
                         if (_isProcessing)

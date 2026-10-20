@@ -22,6 +22,7 @@ class SyncService extends GetxService {
   late final Box<AttendanceRecord> _attendancesBox;
 
   final isLoading = false.obs;
+  final attendancesVersion = 0.obs;
 
   @override
   void onInit() {
@@ -36,6 +37,42 @@ class SyncService extends GetxService {
   List<ScheduleSlot> get schedules => _schedulesBox.values.toList();
   List<Student> get students => _studentsBox.values.toList();
   List<AttendanceRecord> get attendances => _attendancesBox.values.toList();
+
+  static String normalizeSlot(String s) => s.replaceAll(' ', '').trim();
+
+  /// Checks whether an attendance roll has already been submitted for a given slot/session
+  bool isSessionSubmitted({
+    required String groupId,
+    required String sessionDate,
+    String? timeSlot,
+  }) {
+    // Read attendancesVersion for reactive listeners in Obx
+    final _ = attendancesVersion.value;
+    final cleanSlot = normalizeSlot(timeSlot ?? '');
+    return _attendancesBox.values.any((att) {
+      if (att.groupId != groupId || att.sessionDate != sessionDate) return false;
+      if (cleanSlot.isNotEmpty && att.timeSlot.isNotEmpty) {
+        return normalizeSlot(att.timeSlot) == cleanSlot;
+      }
+      return true;
+    });
+  }
+
+  /// Gets existing attendance records for a specific session
+  List<AttendanceRecord> getSessionAttendances({
+    required String groupId,
+    required String sessionDate,
+    String? timeSlot,
+  }) {
+    final cleanSlot = normalizeSlot(timeSlot ?? '');
+    return _attendancesBox.values.where((att) {
+      if (att.groupId != groupId || att.sessionDate != sessionDate) return false;
+      if (cleanSlot.isNotEmpty && att.timeSlot.isNotEmpty) {
+        return normalizeSlot(att.timeSlot) == cleanSlot;
+      }
+      return true;
+    }).toList();
+  }
 
   /// Returns slots scheduled for today
   List<ScheduleSlot> get todaySchedules {
@@ -96,6 +133,16 @@ class SyncService extends GetxService {
           await _studentsBox.put(st.id, st);
         }
 
+        // Fetch and cache today's existing attendances from Sheets
+        try {
+          final todayStr = TimeUtils.getTodayDateString();
+          final remoteAttendances = await sheets.fetchTeacherAttendances(teacher.id, date: todayStr);
+          for (final att in remoteAttendances) {
+            await _attendancesBox.put(att.id, att);
+          }
+        } catch (_) {}
+
+        attendancesVersion.value++;
         isLoading.value = false;
         return true;
       }
@@ -189,6 +236,7 @@ class SyncService extends GetxService {
     for (final r in records) {
       await _attendancesBox.put(r.id, r);
     }
+    attendancesVersion.value++;
 
     // 2. Queue for sync (which immediately pushes if online)
     final queue = Get.find<PendingQueueService>();
