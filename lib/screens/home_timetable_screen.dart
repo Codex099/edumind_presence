@@ -4,6 +4,7 @@ import 'package:intl/intl.dart' hide TextDirection;
 import '../services/auth_service.dart';
 import '../services/sync_service.dart';
 import '../services/connectivity_service.dart';
+import '../services/update_service.dart';
 import '../models/schedule_slot.dart';
 import '../utils/theme.dart';
 import '../utils/translations.dart';
@@ -28,6 +29,9 @@ class _HomeTimetableScreenState extends State<HomeTimetableScreen> {
   void initState() {
     super.initState();
     _syncService.refreshTeacherData();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      Get.find<UpdateService>().checkForUpdate(silent: true, context: context);
+    });
   }
 
   void _openAttendance(ScheduleSlot slot, {bool isReadOnly = false}) {

@@ -51,12 +51,20 @@ class _QrLinkScreenState extends State<QrLinkScreen> {
     super.dispose();
   }
 
-  void _toggleZoom() {
+  Future<void> _toggleZoom() async {
+    final nextZoom = _currentZoom == 1.0 ? 2.0 : 1.0;
     setState(() {
-      _currentZoom = _currentZoom == 1.0 ? 2.0 : 1.0;
+      _currentZoom = nextZoom;
     });
     try {
-      _scannerController.setZoomScale(_currentZoom);
+      if (nextZoom == 1.0) {
+        await _scannerController.setZoomScale(0.0);
+        await _scannerController.resetZoomScale();
+      } else {
+        // MobileScanner setZoomScale requires a normalized scale between 0.0 (1x) and 1.0 (max zoom).
+        // 0.25 provides ~2x-2.5x magnification without degrading camera focus or image clarity.
+        await _scannerController.setZoomScale(0.25);
+      }
     } catch (_) {}
   }
 

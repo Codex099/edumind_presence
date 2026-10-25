@@ -17,6 +17,7 @@ import 'services/sheets_service.dart';
 import 'services/auth_service.dart';
 import 'services/pending_queue_service.dart';
 import 'services/sync_service.dart';
+import 'services/update_service.dart';
 
 import 'utils/theme.dart';
 import 'screens/splash_screen.dart';
@@ -53,6 +54,7 @@ void main() async {
   Get.put(AuthService(), permanent: true);
   Get.put(PendingQueueService(), permanent: true);
   Get.put(SyncService(), permanent: true);
+  Get.put(UpdateService(), permanent: true);
 
   // System UI Overlay (Translucent status bar on dark theme)
   SystemChrome.setSystemUIOverlayStyle(
