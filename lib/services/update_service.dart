@@ -40,6 +40,8 @@ class UpdateService extends GetxService {
 
   final isChecking = false.obs;
   final isDownloading = false.obs;
+  final isDownloaded = false.obs;
+  final downloadedFilePath = ''.obs;
   final downloadProgress = 0.0.obs;
   final downloadedBytes = 0.obs;
   final totalBytes = 0.obs;
@@ -163,17 +165,66 @@ class UpdateService extends GetxService {
     return null;
   }
 
-  /// Downloads the APK and triggers the native Android installer
+  /// Explicitly launches Android Package Installer for an APK file
+  Future<void> triggerInstall({String? path}) async {
+    final targetPath = path ?? downloadedFilePath.value;
+    if (targetPath.isEmpty) return;
+
+    final file = File(targetPath);
+    if (!await file.exists()) {
+      Get.snackbar(
+        'EDUMIND',
+        'Fichier APK introuvable. Veuillez relancer le téléchargement.',
+        backgroundColor: EdumindTheme.absentRed,
+        colorText: Colors.white,
+        snackPosition: SnackPosition.BOTTOM,
+      );
+      return;
+    }
+
+    try {
+      final result = await OpenFilex.open(
+        file.path,
+        type: 'application/vnd.android.package-archive',
+      );
+
+      if (result.type != ResultType.done) {
+        Get.snackbar(
+          'EDUMIND',
+          'Veuillez autoriser l\'installation d\'applications pour EDUMIND dans les paramètres (${result.message})',
+          backgroundColor: EdumindTheme.lateOrange,
+          colorText: Colors.white,
+          duration: const Duration(seconds: 6),
+          snackPosition: SnackPosition.BOTTOM,
+        );
+      }
+    } catch (e) {
+      Get.snackbar(
+        'EDUMIND',
+        'Erreur d\'ouverture : $e',
+        backgroundColor: EdumindTheme.absentRed,
+        colorText: Colors.white,
+        snackPosition: SnackPosition.BOTTOM,
+      );
+    }
+  }
+
+  /// Downloads the APK with linear stream handling and triggers installation
   Future<void> downloadAndInstallApk(AppUpdateInfo info, {VoidCallback? onDone}) async {
     if (info.downloadUrl.isEmpty || isDownloading.value) return;
 
     isDownloading.value = true;
+    isDownloaded.value = false;
     downloadProgress.value = 0.0;
     downloadedBytes.value = 0;
     totalBytes.value = info.apkSizeBytes;
 
+    File? file;
+    IOSink? sink;
+    http.Client? client;
+
     try {
-      final client = http.Client();
+      client = http.Client();
       final request = http.Request('GET', Uri.parse(info.downloadUrl));
       request.headers['User-Agent'] = 'EDUMIND-Presence-App';
 
@@ -183,65 +234,71 @@ class UpdateService extends GetxService {
         final contentLength = response.contentLength ?? info.apkSizeBytes;
         totalBytes.value = contentLength;
 
-        final tempDir = await getTemporaryDirectory();
-        final filePath = '${tempDir.path}/edumind_v${info.latestVersion}.apk';
-        final file = File(filePath);
+        // Use accessible external cache on Android so PackageInstaller can read the file
+        Directory? baseDir;
+        if (Platform.isAndroid) {
+          try {
+            final extDirs = await getExternalCacheDirectories();
+            if (extDirs != null && extDirs.isNotEmpty) {
+              baseDir = extDirs.first;
+            }
+          } catch (_) {}
+        }
+        baseDir ??= await getApplicationSupportDirectory();
+
+        final filePath = '${baseDir.path}/edumind_v${info.latestVersion}.apk';
+        file = File(filePath);
 
         if (await file.exists()) {
-          await file.delete();
+          try {
+            await file.delete();
+          } catch (_) {}
         }
 
-        final sink = file.openWrite();
+        sink = file.openWrite();
         int received = 0;
 
-        await response.stream.listen(
-          (chunk) {
-            sink.add(chunk);
-            received += chunk.length;
-            downloadedBytes.value = received;
-            if (contentLength > 0) {
-              downloadProgress.value = received / contentLength;
-            }
-          },
-          onDone: () async {
-            await sink.flush();
-            await sink.close();
-            client.close();
-            isDownloading.value = false;
+        await for (final chunk in response.stream) {
+          sink.add(chunk);
+          received += chunk.length;
+          downloadedBytes.value = received;
+          if (contentLength > 0) {
+            downloadProgress.value = (received / contentLength).clamp(0.0, 1.0);
+          }
+        }
 
-            if (onDone != null) onDone();
+        await sink.flush();
+        await sink.close();
+        sink = null;
+        client.close();
+        client = null;
 
-            // Launch native Android Package Installer
-            final result = await OpenFilex.open(file.path);
-            if (result.type != ResultType.done) {
-              Get.snackbar(
-                'EDUMIND',
-                'Erreur lors du lancement de l\'installateur (${result.message})',
-                backgroundColor: EdumindTheme.absentRed,
-                colorText: Colors.white,
-                snackPosition: SnackPosition.BOTTOM,
-              );
-            }
-          },
-          onError: (err) {
-            sink.close();
-            client.close();
-            isDownloading.value = false;
-            Get.snackbar(
-              'EDUMIND',
-              'Erreur de téléchargement : $err',
-              backgroundColor: EdumindTheme.absentRed,
-              colorText: Colors.white,
-              snackPosition: SnackPosition.BOTTOM,
-            );
-          },
-          cancelOnError: true,
-        ).asFuture();
+        downloadProgress.value = 1.0;
+        downloadedBytes.value = totalBytes.value > 0 ? totalBytes.value : received;
+        isDownloading.value = false;
+        isDownloaded.value = true;
+        downloadedFilePath.value = file.path;
+
+        if (onDone != null) onDone();
+
+        // Trigger native Android installer
+        await triggerInstall(path: file.path);
       } else {
         client.close();
         isDownloading.value = false;
+        Get.snackbar(
+          'EDUMIND',
+          'Erreur serveur (${response.statusCode}) lors du téléchargement.',
+          backgroundColor: EdumindTheme.absentRed,
+          colorText: Colors.white,
+          snackPosition: SnackPosition.BOTTOM,
+        );
       }
     } catch (e) {
+      try {
+        await sink?.close();
+      } catch (_) {}
+      client?.close();
       isDownloading.value = false;
       Get.snackbar(
         'EDUMIND',
@@ -467,6 +524,70 @@ class UpdateService extends GetxService {
                           ),
                         ),
                         const SizedBox(height: 14),
+                      ] else if (isDownloaded.value) ...[
+                        Container(
+                          padding: const EdgeInsets.all(16),
+                          decoration: BoxDecoration(
+                            color: EdumindTheme.cardDark,
+                            borderRadius: BorderRadius.circular(16),
+                            border: Border.all(color: EdumindTheme.presentGreen.withValues(alpha: 0.5)),
+                          ),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                            children: [
+                              Row(
+                                children: [
+                                  const Icon(Icons.check_circle_rounded, color: EdumindTheme.presentGreen, size: 24),
+                                  const SizedBox(width: 10),
+                                  Expanded(
+                                    child: Text(
+                                      AppTranslations.get('update_ready', lang: lang),
+                                      style: const TextStyle(
+                                        color: Colors.white,
+                                        fontWeight: FontWeight.bold,
+                                        fontSize: 13,
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(height: 14),
+                              ElevatedButton.icon(
+                                onPressed: () => triggerInstall(),
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: EdumindTheme.presentGreen,
+                                  foregroundColor: Colors.white,
+                                  padding: const EdgeInsets.symmetric(vertical: 14),
+                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                                ),
+                                icon: const Icon(Icons.system_security_update_good_rounded, size: 22),
+                                label: Text(
+                                  AppTranslations.get('install_now', lang: lang),
+                                  style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 14),
+                                ),
+                              ),
+                              const SizedBox(height: 10),
+                              Text(
+                                AppTranslations.get('permission_tip', lang: lang),
+                                style: const TextStyle(color: Colors.white60, fontSize: 11, height: 1.35),
+                                textAlign: TextAlign.center,
+                              ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(height: 14),
+                        OutlinedButton(
+                          onPressed: () => Navigator.pop(ctx),
+                          style: OutlinedButton.styleFrom(
+                            padding: const EdgeInsets.symmetric(vertical: 13),
+                            side: const BorderSide(color: EdumindTheme.borderDark),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                          ),
+                          child: Text(
+                            AppTranslations.get('close', lang: lang),
+                            style: const TextStyle(color: Colors.white70, fontWeight: FontWeight.bold),
+                          ),
+                        ),
                       ] else ...[
                         // Action buttons
                         Row(
@@ -489,7 +610,7 @@ class UpdateService extends GetxService {
                             Expanded(
                               flex: 2,
                               child: ElevatedButton.icon(
-                                onPressed: () => downloadAndInstallApk(info, onDone: () => Navigator.pop(ctx)),
+                                onPressed: () => downloadAndInstallApk(info),
                                 style: ElevatedButton.styleFrom(
                                   backgroundColor: EdumindTheme.primaryBlue,
                                   padding: const EdgeInsets.symmetric(vertical: 14),

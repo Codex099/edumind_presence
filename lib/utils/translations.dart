@@ -109,6 +109,9 @@ class AppTranslations {
       'show_qr': 'عرض رمز QR',
       'copy_link': 'نسخ الرابط',
       'link_copied': 'تم نسخ الرابط بنجاح في الحافظة',
+      'install_now': 'تثبيت التحديث الآن',
+      'update_ready': 'اكتمل التحميل والتحديث جاهز للتثبيت',
+      'permission_tip': 'ملاحظة: إذا طُلب منك، يرجى تفعيل "السماح بتثبيت التطبيقات من هذا المصدر" في إعدادات الهاتف.',
     },
     'fr': {
       'app_title': 'EDUMIND Présence',
@@ -217,6 +220,9 @@ class AppTranslations {
       'show_qr': 'Afficher le QR Code',
       'copy_link': 'Copier le lien',
       'link_copied': 'Lien copié dans le presse-papier',
+      'install_now': 'Installer la mise à jour',
+      'update_ready': 'Téléchargement terminé ! Prêt pour l\'installation',
+      'permission_tip': 'Remarque : si demandé, autorisez "Sources inconnues" pour EDUMIND dans les paramètres de votre téléphone.',
     }
   };
 
